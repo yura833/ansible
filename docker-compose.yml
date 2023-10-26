@@ -57,4 +57,4 @@ networks:
   app2:
 volumes:
   jenkins_data:
-  nexus-data:
+  nexus_data:
