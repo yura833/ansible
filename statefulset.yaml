@@ -1,0 +1,96 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: databaseee
+  namespace: exam
+  labels:
+    app: exam
+spec:
+  serviceName: "database-service"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: exam
+  template:
+    metadata:
+      labels:
+        app: exam
+    spec:
+      containers:
+      - name: mssql
+        image: hub.mil.am/mssql/server:24.01.2023
+        ports:
+        - containerPort: 1433
+        env:
+          - name: ACCEPT_EULA
+            value: "Y"
+          - name: MSSQL_SA_PASSWORD
+            valueFrom:
+              configMapKeyRef:
+                name: env-cm
+                key: SA_PASSWORD
+        volumeMounts:
+        - name: exam-data
+          mountPath: /var/opt/mssql/data
+            #resources:
+            #requests:
+            #memory: "512Mi"
+            #cpu: "500m"
+            #limits:
+            #memory: "4096Mi"
+            #cpu: "1000m"
+      imagePullSecrets:
+      - name: local    
+  volumeClaimTemplates:
+  - metadata:
+      name: exam-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: standard
+      resources:
+        requests:
+          storage: 2Gi
+
+
+---
+
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: database-service
+  namespace: exam
+  labels:
+    app: exam-database
+spec:
+  selector:
+    app: exam
+  ports:
+    - protocol: TCP
+      port: 1433
+      targetPort: 1433
+
+
+---
+
+
+
+
+#kind: Service
+#apiVersion: v1
+#metadata:
+# name: database-service-nodeport
+# namespace: exam
+# labels:
+#   app: exam-database
+#spec:
+# selector:
+#   app: exam-database
+# type: NodePort
+# ports:
+# - port: 1433
+#   nodePort: 30011
+#   targetPort: 1433
+
+
+
