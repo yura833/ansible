@@ -6,14 +6,14 @@ metadata:
   labels:
     app: exam
   annotations:
-    cert-manager.io/cluster-issuer: selfsigned-issuer
+    cert-manager.io/cluster-issuer: clusterissuer
     kubernetes.io/tls-acme: "false"
-    cert-manager.io/common-name: "MIL.CA"
-    cert-manager.io/duration: 8760h
-    cert-manager.io/renew-before: 720h
-    cert-manager.io/usages: "server auth"
-    cert-manager.io/private-key-algorithm: "RSA"
-    cert-manager.io/private-key-rotation-policy: "Always"
+    cert-manager.io/common-name: "exam.mil.am"
+      #cert-manager.io/duration: 8760h
+      # cert-manager.io/renew-before: 720h
+      #cert-manager.io/usages: "server auth"
+      #cert-manager.io/private-key-algorithm: "RSA"
+      # cert-manager.io/private-key-rotation-policy: "Always"
     traefik.ingress.kubernetes.io/router.entrypoints: secureweb
     traefik.ingress.kubernetes.io/router.tls: 'true'
 spec:
@@ -43,5 +43,5 @@ spec:
   - hosts:
     - "exam.mil.am"
     - "api-exam.mil.am"
-    secretName: example-certificate
+    secretName: exam-secret
 

@@ -1,20 +1,20 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: databaseee
+  name: database
   namespace: exam
   labels:
-    app: exam
+    app: exam-database
 spec:
   serviceName: "database-service"
   replicas: 1
   selector:
     matchLabels:
-      app: exam
+      app: exam-database
   template:
     metadata:
       labels:
-        app: exam
+        app: exam-database
     spec:
       containers:
       - name: mssql
@@ -32,28 +32,29 @@ spec:
         volumeMounts:
         - name: exam-data
           mountPath: /var/opt/mssql/data
-            #resources:
-            #requests:
-            #memory: "512Mi"
-            #cpu: "500m"
-            #limits:
-            #memory: "4096Mi"
-            #cpu: "1000m"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "4096Mi"
+            cpu: "1000m"
       imagePullSecrets:
-      - name: local    
+      - name: local
   volumeClaimTemplates:
   - metadata:
       name: exam-data
+      namespace: exam
     spec:
-      accessModes: [ "ReadWriteOnce" ]
-      storageClassName: standard
+      accessModes: [ "ReadWriteMany" ]
+      storageClassName: "standard"
       resources:
         requests:
           storage: 2Gi
 
-
+        
+        
 ---
-
 
 apiVersion: v1
 kind: Service
@@ -64,33 +65,14 @@ metadata:
     app: exam-database
 spec:
   selector:
-    app: exam
+    app: exam-database
   ports:
     - protocol: TCP
       port: 1433
       targetPort: 1433
 
 
+
 ---
-
-
-
-
-#kind: Service
-#apiVersion: v1
-#metadata:
-# name: database-service-nodeport
-# namespace: exam
-# labels:
-#   app: exam-database
-#spec:
-# selector:
-#   app: exam-database
-# type: NodePort
-# ports:
-# - port: 1433
-#   nodePort: 30011
-#   targetPort: 1433
-
 
 
