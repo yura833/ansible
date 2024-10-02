@@ -1,0 +1,7 @@
+---
+# tasks file for kubernetes_network
+- name: Install Calico Network Plugin
+  ansible.builtin.shell: su - manager -c "kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml"
+
+- name: Taint master node to prevent workload scheduling
+  ansible.builtin.shell: su - manager -c "kubectl taint nodes --all node-role.kubernetes.io/control-plane-"
