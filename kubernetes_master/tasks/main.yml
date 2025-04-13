@@ -2,7 +2,7 @@
 # tasks file for kubernetes_master
 
 - name: Install required packages
-  apt:
+  ansible.builtin.apt:
     name:
       - curl
       - gnupg2
@@ -10,27 +10,37 @@
       - apt-transport-https
       - ca-certificates
     state: present
-    update_cache: no
+    update_cache: yes
+  become: true
 
 - name: Install Containerd
-  apt:
+  ansible.builtin.apt:
     name: containerd
     state: present
-    update_cache: no
+  become: true
 
 - name: Remove Keyrings Directory (if it exists)
-  ansible.builtin.shell: rm -rf /etc/apt/keyrings
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: absent
+  become: true
 
-- name: Remove Existing Kubernetes Directory (if it exists)
-  ansible.builtin.shell: sudo rm -rf /etc/apt/sources.list.d/pkgs_k8s_io_core_stable_v1_30_deb.list
+- name: Remove Existing Kubernetes APT source file (if it exists)
+  ansible.builtin.file:
+    path: /etc/apt/sources.list.d/pkgs_k8s_io_core_stable_v1_30_deb.list
+    state: absent
+  become: true
 
 - name: Disable swap
-  ansible.builtin.command:
-    cmd: swapoff -a
+  ansible.builtin.command: swapoff -a
+  become: true
 
 - name: Ensure swap is disabled on boot
-  ansible.builtin.command:
-    cmd: sudo sed -i -e '/\/swap.img\s\+none\s\+swap\s\+sw\s\+0\s\+0/s/^/#/' /etc/fstab
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    regexp: '^/swap.img'
+    line: '#/swap.img none swap sw 0 0'
+  become: true
 
 - name: Add kernel modules for Containerd
   ansible.builtin.copy:
@@ -38,152 +48,124 @@
     content: |
       overlay
       br_netfilter
-
-- name: Load kernel modules for Containerd
-  ansible.builtin.shell:
-    cmd: modprobe overlay && modprobe br_netfilter
   become: true
 
-- name: Add kernel parameters for Kubernetes
+- name: Load kernel modules
+  ansible.builtin.shell: modprobe overlay && modprobe br_netfilter
+  become: true
+
+- name: Add sysctl params for Kubernetes
   ansible.builtin.copy:
     dest: /etc/sysctl.d/kubernetes.conf
     content: |
       net.bridge.bridge-nf-call-ip6tables = 1
       net.bridge.bridge-nf-call-iptables = 1
       net.ipv4.ip_forward = 1
+  become: true
 
-- name: Load kernel parameter changes
-  ansible.builtin.command:
-    cmd: sudo sysctl --system
+- name: Apply sysctl params
+  ansible.builtin.command: sysctl --system
+  become: true
 
-- name: Configuring Containerd (building the configuration file)
-  ansible.builtin.command:
-    cmd: sudo sh -c "containerd config default > /opt/containerd/config.toml"
+- name: Generate containerd default config
+  ansible.builtin.command: containerd config default > /opt/containerd/config.toml
+  become: true
 
-- name: Configuring Containerd (Setting SystemdCgroup Variable to True)
-  ansible.builtin.command:
-    cmd: sudo sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /opt/containerd/config.toml
+- name: Set SystemdCgroup to true in containerd config
+  ansible.builtin.replace:
+    path: /opt/containerd/config.toml
+    regexp: 'SystemdCgroup = false'
+    replace: 'SystemdCgroup = true'
+  become: true
 
-- name: Reload systemd configuration
-  ansible.builtin.command:
-    cmd: systemctl daemon-reload
-
-- name: Restart containerd service
-  ansible.builtin.service:
+- name: Reload systemd and restart containerd
+  ansible.builtin.systemd:
+    daemon_reload: yes
     name: containerd
     state: restarted
+  become: true
 
-- name: Allow 6443/tcp through firewall
-  ansible.builtin.command:
-    cmd: sudo ufw allow 6443/tcp
+- name: Allow necessary Kubernetes ports through UFW
+  ansible.builtin.ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  with_items:
+    - 22
+    - 6443
+    - 2379:2380
+    - 8080
+    - 10250
+    - 10251
+    - 10252
+    - 10255
+    - 5473
+    - 179
+  become: true
 
-- name: Allow 2379:2380/tcp through firewall
-  ansible.builtin.command:
-    cmd: sudo ufw allow 2379:2380/tcp
-
-- name: Allow 22/tcp through firewall
-  ansible.builtin.command:
-    cmd: sudo ufw allow 22/tcp
-
-- name: Allow 8080/tcp through firewall
-  ansible.builtin.command:
-    cmd: sudo ufw allow 8080/tcp
-
-- name: Allow 10250/tcp through firewall
-  ansible.builtin.command:
-    cmd: sudo ufw allow 10250/tcp
-
-- name: Allow 10251/tcp through firewall
-  ansible.builtin.command:
-    cmd: sudo ufw allow 10251/tcp
-
-- name: Allow 10252/tcp through firewall
-  ansible.builtin.command:
-    cmd: sudo ufw allow 10252/tcp
-
-- name: Allow 10255/tcp through firewall
-  ansible.builtin.command:
-    cmd: sudo ufw allow 10255/tcp
-
-- name: Allow 5473/tcp through firewall
-  ansible.builtin.command:
-    cmd: sudo ufw allow 5473/tcp
-
-- name: Allow 179/tcp through firewall
-  ansible.builtin.command:
-    cmd: sudo ufw allow 179/tcp
-
-- name: Enable the firewall
+- name: Enable and reload UFW
   ansible.builtin.ufw:
     state: enabled
+  become: true
 
-- name: Reload the firewall
-  ansible.builtin.command:
-    cmd: sudo ufw reload
+- name: Reload UFW
+  ansible.builtin.command: ufw reload
+  become: true
 
-- name: Prepare keyrings directory and update permissions
+- name: Prepare keyrings directory
   ansible.builtin.file:
     path: /etc/apt/keyrings
     state: directory
     mode: '0755'
   become: true
 
-
-
 - name: Add Kubernetes apt-key
   ansible.builtin.get_url:
-    url: https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key
+    url: https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key
     dest: /etc/apt/keyrings/kubernetes-apt-keyring.asc
-    mode: "0644"
+    mode: '0644'
     force: true
   become: true
 
 - name: Add Kubernetes APT repository
   ansible.builtin.apt_repository:
-    repo: "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.asc] https://pkgs.k8s.io/core:/stable:/v1.30/deb/ /"
+    repo: "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.asc] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /"
     state: present
     filename: "kubernetes"
-    update_cache: yes
   become: true
 
-- name: Perform an apt update
+- name: Update apt
   ansible.builtin.apt:
     update_cache: yes
   become: true
 
-- name: Install kubeadm, kubelet, kubectl
+- name: Install Kubernetes components
   ansible.builtin.apt:
     name:
       - kubelet
       - kubeadm
       - kubectl
     state: present
-    update_cache: no
   become: true
 
-- name: Hold kubelet, kubeadm, kubectl packages
-  ansible.builtin.command:
-    cmd: sudo apt-mark hold kubelet kubeadm kubectl
+- name: Hold Kubernetes packages
+  ansible.builtin.command: apt-mark hold kubelet kubeadm kubectl
   become: true
 
-- name: Replace /etc/default/kubelet contents
+- name: Add cgroup driver config to kubelet
   ansible.builtin.copy:
     dest: /etc/default/kubelet
     content: 'KUBELET_EXTRA_ARGS="--cgroup-driver=cgroupfs"'
   become: true
 
-- name: Reload systemd configuration
-  ansible.builtin.command:
-    cmd: systemctl daemon-reload
-  become: true
-
-- name: Restart kubelet service
-  ansible.builtin.service:
+- name: Reload systemd and restart kubelet
+  ansible.builtin.systemd:
+    daemon_reload: yes
     name: kubelet
     state: restarted
   become: true
 
-- name: Update System-Wide Profile for Kubernetes
+- name: Set Kubernetes profile environment
   ansible.builtin.copy:
     dest: /etc/profile.d/kubernetes.sh
     content: |
@@ -191,49 +173,44 @@
       export ANSIBLE_USER="manager"
   become: true
 
-- name: Update Kubeadm Environment Variable
-  ansible.builtin.command:
-    cmd: sudo sed -i -e '/^\[Service\]/a Environment="KUBELET_EXTRA_ARGS=--fail-swap-on=false"' /usr/lib/systemd/system/kubelet.service.d/10-kubeadm.conf
+- name: Add fail-swap-on=false to kubelet config
+  ansible.builtin.lineinfile:
+    path: /usr/lib/systemd/system/kubelet.service.d/10-kubeadm.conf
+    insertafter: '^\[Service\]'
+    line: 'Environment="KUBELET_EXTRA_ARGS=--fail-swap-on=false"'
   become: true
 
-- name: Reload systemd configuration
-  ansible.builtin.command:
-    cmd: systemctl daemon-reload
-  become: true
-
-- name: Restart kubelet service
-  ansible.builtin.service:
+- name: Reload systemd and restart kubelet again
+  ansible.builtin.systemd:
+    daemon_reload: yes
     name: kubelet
     state: restarted
   become: true
 
-- name: Initialize Kubernetes control plane
-  ansible.builtin.command:
-    cmd: kubeadm init --pod-network-cidr=10.0.0.0/16 --skip-phases=addon/kube-proxy
-    creates: /tmp/kubeadm_output
+- name: Initialize Kubernetes control plane (no kube-proxy)
+  ansible.builtin.command: kubeadm init --pod-network-cidr=10.0.0.0/16 --skip-phases=addon/kube-proxy
   register: kubeadm_init_output
   become: true
   changed_when: false
 
-- name: Set permissions for Kubernetes Admin
+- name: Set permissions on admin.conf
   ansible.builtin.file:
     path: /etc/kubernetes/admin.conf
-    state: file
     mode: '0755'
+    state: file
   become: true
 
-- name: Generate the join command for worker nodes
-  command: kubeadm token create --print-join-command
+- name: Generate the join command
+  ansible.builtin.command: kubeadm token create --print-join-command
   register: join_command
   become: true
 
-- name: Copy the join command to a file
-  copy:
+- name: Save join command to file
+  ansible.builtin.copy:
     content: "{{ join_command.stdout }}"
     dest: /tmp/join-command
-  when: join_command is defined
   become: true
 
-- name: Print join command for debugging
-  debug:
+- name: Print join command
+  ansible.builtin.debug:
     msg: "Join command: {{ join_command.stdout }}"
