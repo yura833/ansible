@@ -1,5 +1,6 @@
 ---
 # tasks file for kubernetes_master
+
 - name: Install required packages
   apt:
     name:
@@ -126,21 +127,23 @@
     state: directory
     mode: '0755'
 
-- name: Add apt key
-      apt_key:
-        url: https://pkgs.k8s.io/core:/stable:/{{ short_version }}/deb/Release.key
-        keyring: /usr/share/keyrings/kubernetes-archive-keyring.gpg
-      when: gpg_key_present.stat.exists != 'true'
+- name: Add Kubernetes GPG key securely
+  ansible.builtin.apt_key:
+    url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+    keyring: /usr/share/keyrings/kubernetes-archive-keyring.gpg
+  become: true
 
 - name: Add the Kubernetes Repository
-  apt_repository:
-    repo: deb [signed-by=/usr/share/keyrings/kubernetes-archive-keyring.gpg] https://pkgs.k8s.io/core:/stable:/{{ short_version }}/deb/ /
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/usr/share/keyrings/kubernetes-archive-keyring.gpg] https://apt.kubernetes.io/ kubernetes-xenial main"
     state: present
     filename: kubernetes
+  become: true
 
 - name: Perform an apt update
-  apt:
+  ansible.builtin.apt:
     update_cache: yes
+  become: true
 
 - name: Install kubeadm, kubelet, kubectl
   ansible.builtin.apt:
@@ -150,24 +153,29 @@
       - kubectl
     state: present
     update_cache: no
+  become: true
 
 - name: Hold kubelet, kubeadm, kubectl packages
   ansible.builtin.command:
     cmd: sudo apt-mark hold kubelet kubeadm kubectl
+  become: true
 
 - name: Replace /etc/default/kubelet contents
   ansible.builtin.copy:
     dest: /etc/default/kubelet
     content: 'KUBELET_EXTRA_ARGS="--cgroup-driver=cgroupfs"'
+  become: true
 
 - name: Reload systemd configuration
   ansible.builtin.command:
     cmd: systemctl daemon-reload
+  become: true
 
 - name: Restart kubelet service
   ansible.builtin.service:
     name: kubelet
     state: restarted
+  become: true
 
 - name: Update System-Wide Profile for Kubernetes
   ansible.builtin.copy:
@@ -175,24 +183,28 @@
     content: |
       export KUBECONFIG=/etc/kubernetes/admin.conf
       export ANSIBLE_USER="manager"
-
+  become: true
 
 - name: Update Kubeadm Environment Variable
   ansible.builtin.command:
     cmd: sudo sed -i -e '/^\[Service\]/a Environment="KUBELET_EXTRA_ARGS=--fail-swap-on=false"' /usr/lib/systemd/system/kubelet.service.d/10-kubeadm.conf
+  become: true
 
 - name: Reload systemd configuration
   ansible.builtin.command:
     cmd: systemctl daemon-reload
+  become: true
 
 - name: Restart kubelet service
   ansible.builtin.service:
     name: kubelet
     state: restarted
+  become: true
 
 - name: Pull kubeadm container images
   ansible.builtin.command:
     cmd: sudo kubeadm config images pull
+  become: true
 
 - name: Initialize Kubernetes control plane
   ansible.builtin.command:
@@ -203,23 +215,24 @@
   changed_when: false
 
 - name: Set permissions for Kubernetes Admin
-  file:
+  ansible.builtin.file:
     path: /etc/kubernetes/admin.conf
     state: file
     mode: '0755'
-
+  become: true
 
 - name: Generate the join command for worker nodes
   command: kubeadm token create --print-join-command
   register: join_command
+  become: true
 
 - name: Copy the join command to a file
   copy:
     content: "{{ join_command.stdout }}"
     dest: /tmp/join-command
   when: join_command is defined
+  become: true
 
 - name: Print join command for debugging
   debug:
     msg: "Join command: {{ join_command.stdout }}"
-
