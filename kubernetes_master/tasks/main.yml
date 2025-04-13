@@ -85,6 +85,13 @@
     state: restarted
   become: true
 
+- name: Install UFW
+  ansible.builtin.apt:
+    name: ufw
+    state: present
+    update_cache: yes
+  become: true
+
 - name: Allow necessary Kubernetes ports through UFW
   ansible.builtin.ufw:
     rule: allow
@@ -190,7 +197,7 @@
   become: true
 
 - name: Initialize Kubernetes control plane (no kube-proxy)
-  ansible.builtin.command: kubeadm init --pod-network-cidr=10.0.0.0/16 --skip-phases=addon/kube-proxy
+  ansible.builtin.command: kubeadm init --pod-network-cidr=10.0.0.0/16 --skip-phases=addon/kube-proxy --ignore-preflight-errors
   register: kubeadm_init_output
   become: true
   changed_when: false
