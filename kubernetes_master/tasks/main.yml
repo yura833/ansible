@@ -68,12 +68,12 @@
   become: true
 
 - name: Generate containerd default config
-  ansible.builtin.command: containerd config default > /opt/containerd/config.toml
+  ansible.builtin.command: containerd config default > /etc/containerd/config.toml
   become: true
 
 - name: Set SystemdCgroup to true in containerd config
   ansible.builtin.replace:
-    path: /opt/containerd/config.toml
+    path: /etc/containerd/config.toml
     regexp: 'SystemdCgroup = false'
     replace: 'SystemdCgroup = true'
   become: true
