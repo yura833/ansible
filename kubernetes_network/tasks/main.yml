@@ -1,7 +1,27 @@
----
-# tasks file for kubernetes_network
-- name: Install Calico Network Plugin
-  ansible.builtin.shell: su - manager -c "kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml"
+- name: Download Cilium CLI
+  get_url:
+    url: https://github.com/cilium/cilium-cli/releases/latest/download/cilium-linux-amd64
+    dest: /usr/local/bin/cilium
+    mode: '0755'
+  become: true
 
-- name: Taint master node to prevent workload scheduling
-  ansible.builtin.shell: su - manager -c "kubectl taint nodes --all node-role.kubernetes.io/control-plane-"
+- name: Install Cilium CLI completion (optional)
+  shell: cilium completion bash > /etc/bash_completion.d/cilium
+  become: true
+
+- name: Remove kube-proxy if present
+  shell: su - manager -c "kubectl -n kube-system delete daemonset kube-proxy"
+  ignore_errors: true
+
+- name: Install Cilium with kube-proxy replacement
+  shell: >
+    su - manager -c "cilium install
+    --kube-proxy-replacement=strict
+    --enable-hubble
+    --set hubble.relay.enabled=true
+    --set hubble.ui.enabled=true"
+  become: true
+
+- name: Taint master node to allow scheduling (if you want workloads on master)
+  shell: su - manager -c "kubectl taint nodes --all node-role.kubernetes.io/control-plane-"
+  become: true
