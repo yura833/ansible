@@ -205,11 +205,6 @@
     state: restarted
   become: true
 
-- name: Pull kubeadm container images
-  ansible.builtin.command:
-    cmd: sudo kubeadm config images pull
-  become: true
-
 - name: Initialize Kubernetes control plane
   ansible.builtin.command:
     cmd: kubeadm init --pod-network-cidr=10.244.0.0/16
