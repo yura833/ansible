@@ -126,14 +126,21 @@
     state: directory
     mode: '0755'
 
-- name: Download Kubernetes GPG key securely
-  ansible.builtin.shell: curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+- name: Add apt key
+      apt_key:
+        url: https://pkgs.k8s.io/core:/stable:/{{ short_version }}/deb/Release.key
+        keyring: /usr/share/keyrings/kubernetes-archive-keyring.gpg
+      when: gpg_key_present.stat.exists != 'true'
 
-- name: Add Kubernetes repository
-  ansible.builtin.apt_repository:
-    repo: "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.30/deb/ /"
+- name: Add the Kubernetes Repository
+  apt_repository:
+    repo: deb [signed-by=/usr/share/keyrings/kubernetes-archive-keyring.gpg] https://pkgs.k8s.io/core:/stable:/{{ short_version }}/deb/ /
     state: present
-    update_cache: no
+    filename: kubernetes
+
+- name: Perform an apt update
+  apt:
+    update_cache: yes
 
 - name: Install kubeadm, kubelet, kubectl
   ansible.builtin.apt:
