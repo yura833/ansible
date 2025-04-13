@@ -122,22 +122,26 @@
     cmd: sudo ufw reload
 
 - name: Prepare keyrings directory and update permissions
-  file:
+  ansible.builtin.file:
     path: /etc/apt/keyrings
     state: directory
     mode: '0755'
-
-- name: Add Kubernetes GPG key securely
-  ansible.builtin.apt_key:
-    url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
-    keyring: /usr/share/keyrings/kubernetes-archive-keyring.gpg
   become: true
 
-- name: Add the Kubernetes Repository
+- name: Add Kubernetes apt-key
+  ansible.builtin.get_url:
+    url: https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key
+    dest: /etc/apt/keyrings/kubernetes-apt-keyring.asc
+    mode: "0644"
+    force: true
+  become: true
+
+- name: Add Kubernetes APT repository
   ansible.builtin.apt_repository:
-    repo: "deb [signed-by=/usr/share/keyrings/kubernetes-archive-keyring.gpg] https://apt.kubernetes.io/ kubernetes-xenial main"
+    repo: "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.asc] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /"
     state: present
-    filename: kubernetes
+    filename: "kubernetes"
+    update_cache: yes
   become: true
 
 - name: Perform an apt update
