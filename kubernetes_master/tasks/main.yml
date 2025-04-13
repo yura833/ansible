@@ -209,7 +209,7 @@
 
 - name: Initialize Kubernetes control plane
   ansible.builtin.command:
-    cmd: kubeadm init --pod-network-cidr=10.244.0.0/16
+    cmd: kubeadm init --pod-network-cidr=10.0.0.0/16 --skip-phases=addon/kube-proxy
     creates: /tmp/kubeadm_output
   register: kubeadm_init_output
   become: true
