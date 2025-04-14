@@ -31,16 +31,16 @@
     state: absent
   become: true
 
-- name: Disable swap
-  ansible.builtin.command: swapoff -a
-  become: true
+#- name: Disable swap
+#  ansible.builtin.command: swapoff -a
+#  become: true
 
-- name: Ensure swap is disabled on boot
-  ansible.builtin.lineinfile:
-    path: /etc/fstab
-    regexp: '^/swap.img'
-    line: '#/swap.img none swap sw 0 0'
-  become: true
+#- name: Ensure swap is disabled on boot
+ # ansible.builtin.lineinfile:
+ #   path: /etc/fstab
+ #   regexp: '^/swap.img'
+ #   line: '#/swap.img none swap sw 0 0'
+ # become: true
 
 - name: Add kernel modules for Containerd
   ansible.builtin.copy:
@@ -110,7 +110,7 @@
     - 179
   become: true
 
-- name: Enable and reload UFW
+- name: Enable and UFW
   ansible.builtin.ufw:
     state: enabled
   become: true
@@ -161,43 +161,43 @@
   ansible.builtin.command: apt-mark hold kubelet kubeadm kubectl
   become: true
 
-- name: Add cgroup driver config to kubelet
-  ansible.builtin.copy:
-    dest: /etc/default/kubelet
-    content: 'KUBELET_EXTRA_ARGS="--cgroup-driver=cgroupfs"'
-  become: true
+#- name: Add cgroup driver config to kubelet
+#  ansible.builtin.copy:
+#    dest: /etc/default/kubelet
+ #   content: 'KUBELET_EXTRA_ARGS="--cgroup-driver=cgroupfs"'
+ # become: true
 
-- name: Reload systemd and restart kubelet
-  ansible.builtin.systemd:
-    daemon_reload: yes
-    name: kubelet
-    state: restarted
-  become: true
+#- name: Reload systemd and restart kubelet
+#  ansible.builtin.systemd:
+#    daemon_reload: yes
+#    name: kubelet
+ #   state: restarted
+ # become: true
 
-- name: Set Kubernetes profile environment
-  ansible.builtin.copy:
-    dest: /etc/profile.d/kubernetes.sh
-    content: |
-      export KUBECONFIG=/etc/kubernetes/admin.conf
-      export ANSIBLE_USER="manager"
-  become: true
+#- name: Set Kubernetes profile environment
+#  ansible.builtin.copy:
+#   dest: /etc/profile.d/kubernetes.sh
+ #   content: |
+ #     export KUBECONFIG=/etc/kubernetes/admin.conf
+ #     export ANSIBLE_USER="manager"
+ # become: true
 
-- name: Add fail-swap-on=false to kubelet config
-  ansible.builtin.lineinfile:
-    path: /usr/lib/systemd/system/kubelet.service.d/10-kubeadm.conf
-    insertafter: '^\[Service\]'
-    line: 'Environment="KUBELET_EXTRA_ARGS=--fail-swap-on=false"'
-  become: true
+#- name: Add fail-swap-on=false to kubelet config
+#  ansible.builtin.lineinfile:
+#    path: /usr/lib/systemd/system/kubelet.service.d/10-kubeadm.conf
+#    insertafter: '^\[Service\]'
+ #   line: 'Environment="KUBELET_EXTRA_ARGS=--fail-swap-on=false"'
+ # become: true
 
-- name: Reload systemd and restart kubelet again
-  ansible.builtin.systemd:
-    daemon_reload: yes
-    name: kubelet
-    state: restarted
-  become: true
+#- name: Reload systemd and restart kubelet again
+ # ansible.builtin.systemd:
+#daemon_reload: yes
+  #  name: kubelet
+  #  state: restarted
+ # become: true
 
 - name: Initialize Kubernetes control plane (no kube-proxy)
-  ansible.builtin.command: kubeadm init --pod-network-cidr=10.0.0.0/16 --skip-phases=addon/kube-proxy --ignore-preflight-errors
+  ansible.builtin.command: kubeadm init --pod-network-cidr=10.244.0.0/16 --skip-phases=addon/kube-proxy --ignore-preflight-errors
   register: kubeadm_init_output
   become: true
   changed_when: false
