@@ -1,23 +1,17 @@
 ---
-# tasks file for kubernetes_master
+ tasks file for kubernetes_master
 
 - name: Install required packages
-  ansible.builtin.apt:
-    name:
-      - curl
-      - gnupg2
-      - software-properties-common
-      - apt-transport-https
-      - ca-certificates
-    state: present
-    update_cache: yes
-  become: true
-
-- name: Install Containerd
-  ansible.builtin.apt:
-    name: containerd
-    state: present
-  become: true
+ ansible.builtin.apt:
+   name:
+     - curl
+     - gnupg2
+     - software-properties-common
+     - apt-transport-https
+     - ca-certificates
+   state: present
+   update_cache: yes
+ become: true
 
 - name: Remove Keyrings Directory (if it exists)
   ansible.builtin.file:
@@ -31,16 +25,16 @@
     state: absent
   become: true
 
-#- name: Disable swap
-#  ansible.builtin.command: swapoff -a
-#  become: true
+- name: Disable swap
+  ansible.builtin.command: swapoff -a
+  become: true
 
-#- name: Ensure swap is disabled on boot
- # ansible.builtin.lineinfile:
- #   path: /etc/fstab
- #   regexp: '^/swap.img'
- #   line: '#/swap.img none swap sw 0 0'
- # become: true
+- name: Ensure swap is disabled on boot
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    regexp: '^/swap.img'
+    line: '#/swap.img none swap sw 0 0'
+  become: true
 
 - name: Add kernel modules for Containerd
   ansible.builtin.copy:
@@ -67,22 +61,105 @@
   ansible.builtin.command: sysctl --system
   become: true
 
-- name: Generate containerd default config
-  ansible.builtin.command: containerd config default > /etc/containerd/config.toml
+# Containerd Installation via download and extract
+- name: Download containerd
+  ansible.builtin.get_url:
+    url: "https://github.com/containerd/containerd/releases/download/v2.0.0/containerd-2.0.0-linux-amd64.tar.gz"
+    dest: "/tmp/containerd-2.0.0-linux-amd64.tar.gz"
   become: true
 
-- name: Set SystemdCgroup to true in containerd config
-  ansible.builtin.replace:
-    path: /etc/containerd/config.toml
-    regexp: 'SystemdCgroup = false'
-    replace: 'SystemdCgroup = true'
+- name: Extract containerd
+  ansible.builtin.unarchive:
+    src: "/tmp/containerd-2.0.0-linux-amd64.tar.gz"
+    dest: "/usr/local"
+    remote_src: yes
   become: true
 
-- name: Reload systemd and restart containerd
+- name: Download containerd systemd service file
+  ansible.builtin.get_url:
+    url: "https://raw.githubusercontent.com/containerd/containerd/main/containerd.service"
+    dest: "/tmp/containerd.service"
+  become: true
+
+- name: Copy containerd service file to systemd directory
+  ansible.builtin.shell: |
+    cp /tmp/containerd.service /lib/systemd/system/containerd.service
+  become: true
+
+
+- name: Reload systemd and enable containerd service
   ansible.builtin.systemd:
     daemon_reload: yes
     name: containerd
+    state: started
+    enabled: yes
+  become: true
+
+# Install runc
+- name: Download runc binary
+  ansible.builtin.get_url:
+    url: "https://github.com/opencontainers/runc/releases/download/v1.2.6/runc.amd64"
+    dest: "/tmp/runc.amd64"
+  become: true
+
+- name: Install runc binary
+  ansible.builtin.command:
+    cmd: "install -m 755 /tmp/runc.amd64 /usr/local/sbin/runc"
+  become: true
+
+# Install CNI plugins
+- name: Download CNI plugins tarball
+  ansible.builtin.get_url:
+    url: "https://github.com/containernetworking/plugins/releases/download/v1.6.2/cni-plugins-linux-amd64-v1.6.2.tgz"
+    dest: "/tmp/cni-plugins-linux-amd64-v1.6.2.tgz"
+  become: true
+
+- name: Create CNI bin directory
+  ansible.builtin.file:
+    path: /opt/cni/bin
+    state: directory
+    mode: '0755'
+  become: true
+
+- name: Extract CNI plugins to /opt/cni/bin
+  ansible.builtin.unarchive:
+    src: "/tmp/cni-plugins-linux-amd64-v1.6.2.tgz"
+    dest: "/opt/cni/bin"
+    remote_src: yes
+  become: true
+
+# Create containerd configuration
+- name: Ensure /etc/containerd directory exists
+  ansible.builtin.file:
+    path: /etc/containerd
+    state: directory
+    mode: '0755'
+  become: true
+
+- name: Create containerd default configuration
+  ansible.builtin.shell: |
+    containerd config default | tee /etc/containerd/config.toml
+  become: true
+
+# Enable and restart containerd service
+- name: Restart containerd service
+  ansible.builtin.systemd:
+    name: containerd
     state: restarted
+  become: true
+
+# Kubernetes installation and configuration
+- name: Add sysctl params for Kubernetes
+  ansible.builtin.copy:
+    dest: /etc/sysctl.d/kubernetes.conf
+    content: |
+      net.bridge.bridge-nf-call-ip6tables = 1
+      net.bridge.bridge-nf-call-iptables = 1
+      net.ipv4.ip_forward = 1
+  become: true
+
+- name: Apply sysctl params
+  ansible.builtin.command: sysctl --system
   become: true
 
 - name: Install UFW
@@ -119,34 +196,23 @@
   ansible.builtin.command: ufw reload
   become: true
 
-- name: Ensure keyrings directory exists
-  ansible.builtin.file:
-    path: /etc/apt/keyrings
-    state: directory
-    mode: '0755'
-  become: true
 
 - name: Download Kubernetes GPG key and convert to .gpg
   ansible.builtin.shell: |
-    curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.31/deb/Release.key | \
+    curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.32/deb/Release.key | \
     gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
   args:
     creates: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
   become: true
 
-- name: Add Kubernetes apt repository (v1.31)
+- name: Add Kubernetes apt repository (v1.32)
   ansible.builtin.copy:
     dest: /etc/apt/sources.list.d/kubernetes.list
     content: |
-      deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /
+      deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.32/deb/ /
     mode: '0644'
   become: true
 
-
-- name: Update apt
-  ansible.builtin.apt:
-    update_cache: yes
-  become: true
 
 - name: Install Kubernetes components
   ansible.builtin.apt:
@@ -155,49 +221,22 @@
       - kubeadm
       - kubectl
     state: present
+    force: yes
   become: true
 
 - name: Hold Kubernetes packages
   ansible.builtin.command: apt-mark hold kubelet kubeadm kubectl
   become: true
 
-#- name: Add cgroup driver config to kubelet
-#  ansible.builtin.copy:
-#    dest: /etc/default/kubelet
- #   content: 'KUBELET_EXTRA_ARGS="--cgroup-driver=cgroupfs"'
- # become: true
-
-#- name: Reload systemd and restart kubelet
-#  ansible.builtin.systemd:
-#    daemon_reload: yes
-#    name: kubelet
- #   state: restarted
- # become: true
-
-#- name: Set Kubernetes profile environment
-#  ansible.builtin.copy:
-#   dest: /etc/profile.d/kubernetes.sh
- #   content: |
- #     export KUBECONFIG=/etc/kubernetes/admin.conf
- #     export ANSIBLE_USER="manager"
- # become: true
-
 #- name: Add fail-swap-on=false to kubelet config
 #  ansible.builtin.lineinfile:
 #    path: /usr/lib/systemd/system/kubelet.service.d/10-kubeadm.conf
 #    insertafter: '^\[Service\]'
- #   line: 'Environment="KUBELET_EXTRA_ARGS=--fail-swap-on=false"'
- # become: true
-
-#- name: Reload systemd and restart kubelet again
- # ansible.builtin.systemd:
-#daemon_reload: yes
-  #  name: kubelet
-  #  state: restarted
- # become: true
+#    line: 'Environment="KUBELET_EXTRA_ARGS=--fail-swap-on=false"'
+#  become: true
 
 - name: Initialize Kubernetes control plane (no kube-proxy)
-  ansible.builtin.command: kubeadm init --pod-network-cidr=10.244.0.0/16 --skip-phases=addon/kube-proxy --ignore-preflight-errors
+  ansible.builtin.command: kubeadm init --pod-network-cidr=10.244.0.0/16 --skip-phases=addon/kube-proxy
   register: kubeadm_init_output
   become: true
   changed_when: false
